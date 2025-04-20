@@ -1,0 +1,4 @@
+// this is path for a db file absolute, will be unix system
+#include <string>
+
+std::string dbPath = "@DbPath@";
