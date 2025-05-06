@@ -2,3 +2,4 @@
 
 ## Links
 
+[Презентация проекта](presentation.md)
