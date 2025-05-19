@@ -1,6 +1,9 @@
 #include "DataAccess.h"
 #include <sstream>
 #include "User.h"
+#include <iostream>
+#include <stdexcept>
+#include "Car.h"
 
 void check_rc(int rc, sqlite3* db) {
     if (rc != SQLITE_OK) {
@@ -12,33 +15,35 @@ void check_rc(int rc, sqlite3* db) {
 
 DataAccess::DataAccess(string dbName)
 {
-    int rc = sqlite3_open(dbName, &db);
+    int rc = sqlite3_open(dbName.c_str(), &db);
     
     if (rc != SQLITE_OK) {
         std::cerr << "Cannot open database: " << sqlite3_errmsg(db) << std::endl;
         sqlite3_close(db);
-        return nullptr;
     }
 }
 
 Role DataAccess::getRoleFor(std::string surname)
 {
     const char* sql = "SELECT role FROM User WHERE surname=?";
-    rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
+    int rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
     check_rc(rc, db);
-    rc = sqlite3_bind_text(res, 1, surname, -1, SQLITE_STATIC);
+    rc = sqlite3_bind_text(res, 1, surname.c_str(), -1, SQLITE_STATIC);
     check_rc(rc, db);
     rc = sqlite3_step(res);
+    if (rc == SQLITE_DONE) {
+        throw std::invalid_argument("No user with this surname!");
+    }
     if (rc != SQLITE_ROW) {
         std::cerr << "Error happend while reading from db (step): " << sqlite3_errmsg(db) << '\n';
     }
     const unsigned char* value = sqlite3_column_text(res, 0);
     
-    sqlite3_finalize(stmt);
+    sqlite3_finalize(res);
     
-    if (value == "worker") {
+    if (std::string(reinterpret_cast<const char*>(value)) == "worker") {
         return Role::worker;
-    } else if (value == "driver") {
+    } else if (std::string(reinterpret_cast<const char*>(value)) == "driver") {
         return Role::driver;
     } else {
         std::cerr << "Wrong role returned: " << value << '\n';
@@ -47,102 +52,128 @@ Role DataAccess::getRoleFor(std::string surname)
     
 }
 
-string DataAccess::GetCompletedOrders(string for_who, ymd from, ymd to)
-{
-    // Convert dates to string format
+std::string DataAccess::GetCompletedOrders(std::string for_who, ymd from, ymd to) {
+    // 1. Validate date range
+    if (from > to) {
+        throw std::invalid_argument("Invalid date range: 'from' date must be earlier than 'to' date.");
+    }
+    
+    // 2. Check if driver exists
+    const char* check_driver_sql = "SELECT 1 FROM Driver WHERE surname = ?;";
+    sqlite3_stmt* check_stmt;
+    if (sqlite3_prepare_v2(db, check_driver_sql, -1, &check_stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare driver check statement." << sqlite3_errmsg(db);
+    }
+    
+    sqlite3_bind_text(check_stmt, 1, for_who.c_str(), -1, SQLITE_STATIC);
+    if (sqlite3_step(check_stmt) != SQLITE_ROW) {
+        sqlite3_finalize(check_stmt);
+        throw std::invalid_argument("Driver '" + for_who + "' does not exist.");
+    }
+    sqlite3_finalize(check_stmt);
+    
+    // 3. Proceed with original query
     std::string start_str = std::format("{:04}-{:02}-{:02}", int(from.year()), unsigned(from.month()), unsigned(from.day()));
     std::string end_str = std::format("{:04}-{:02}-{:02}", int(to.year()), unsigned(to.month()), unsigned(to.day()));
     
-    // Prepare SQL statement with placeholders
-    const char* sql = "SELECT date, surnameOfDriver, numberOfCar, distance, massOfBaggage, cost FROM CompletedOrders WHERE date BETWEEN ? AND ?;";
+    const char* sql = "SELECT date, surnameOfDriver, numberOfCar, distance, massOfBaggage, cost FROM CompletedOrders WHERE date BETWEEN ? AND ? AND surnameOfDriver=?;";
+    sqlite3_stmt* res;
     if (sqlite3_prepare_v2(db, sql, -1, &res, nullptr) != SQLITE_OK) {
-        std::cerr << "Failed to prepare statement." << std::endl;
-        sqlite3_close(db);
-        return 1;
+        throw std::runtime_error("Failed to prepare query statement.");
     }
     
-    // Bind parameters
     sqlite3_bind_text(res, 1, start_str.c_str(), -1, SQLITE_STATIC);
     sqlite3_bind_text(res, 2, end_str.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(res, 3, for_who.c_str(), -1, SQLITE_STATIC);
     
-    // Execute query and fetch results
     std::ostringstream oss;
+    bool has_results = false;
     while (sqlite3_step(res) == SQLITE_ROW) {
-        int column_count = sqlite3_column_count(stmt); // Get number of columns
-
-        for (int i = 0; i < column_count; ++i) {
-            const char* column_name = sqlite3_column_name(stmt, i);
-            const char* column_value = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
-
+        has_results = true;
+        for (int i = 0; i < sqlite3_column_count(res); ++i) {
+            const char* column_name = sqlite3_column_name(res, i);
+            const char* column_value = reinterpret_cast<const char*>(sqlite3_column_text(res, i));
             oss << column_name << ": " << (column_value ? column_value : "NULL") << " | ";
         }
-        oss << std::endl; // New row
+        oss << std::endl;
     }
-
-    sqlite3_finalize(stmt);
+    
+    sqlite3_finalize(res);
+    
+    if (!has_results) {
+        throw std::runtime_error("No completed orders found for driver '" + for_who + "' in the specified date range.");
+    }
+    
     return oss.str();
 }
 
 string DataAccess::GetCarRunWeightAndData(string number, string surname)
 {
-    const char* sql = "SELECT avaliableCars FROM User WHERE surname=?;";
-
+    const char* sql = "SELECT avaliableCars, role FROM User WHERE surname=?;";
+    
     if (sqlite3_prepare_v2(db, sql, -1, &res, nullptr) != SQLITE_OK) {
-        std::cerr << "Failed to prepare statement." << std::endl;
+        std::cerr << "Failed to prepare statement." << sqlite3_errmsg(db) << std::endl;
         sqlite3_close(db);
-        return 1;
     }
-
+    
     sqlite3_bind_text(res, 1, surname.c_str(), -1, SQLITE_STATIC);
-
+    
+    int rc = sqlite3_step(res);
+    
     if (rc != SQLITE_ROW) {
         std::cerr << "Error happend while reading from db (step): " << sqlite3_errmsg(db) << '\n';
     }
     const void* value = sqlite3_column_text(res, 0); 
-    int blobSize = sqlite3_column_bytes(stmt, 0);
-
-    auto cars = User::decodeAvaliableCars(value, blobSize);
-
-    if (!cars.contains(number)) {
-        throw error;
+    int blobSize = sqlite3_column_bytes(res, 0);
+    
+    const unsigned char* role = sqlite3_column_text(res, 1);
+    if (std::string(reinterpret_cast<const char*>(value)) == "driver") {
+        
+        auto cars = User::decodeAvaliableCars(value, blobSize);
+        
+        if (std::find(cars.begin(), cars.end(), number) == cars.end()) {
+            throw std::invalid_argument("user doesn't have access to this car");
+        }
     }
-
-    const char* sql2 = "SELECT capableWeight, usage FROM Car WHERE Car_pk=?;";
-
+    
+    const char* sql2 = "SELECT capableWeight, usage FROM Car WHERE number=?;";
+    
     if (sqlite3_prepare_v2(db, sql2, -1, &res, nullptr) != SQLITE_OK) {
-        std::cerr << "Failed to prepare statement." << std::endl;
+        std::cerr << "Failed to prepare statement." << sqlite3_errmsg(db) << std::endl;
         sqlite3_close(db);
-        return 1;
     }
-
+    
     sqlite3_bind_text(res, 1, number.c_str(), -1, SQLITE_STATIC);
+    if (rc == SQLITE_DONE) {
+        throw std::invalid_argument("No car with this number");
+    }
     if (rc != SQLITE_ROW) {
         std::cerr << "Error happend while reading from db (step): " << sqlite3_errmsg(db) << '\n';
     }
-
+    
     std::ostringstream oss;
     while (sqlite3_step(res) == SQLITE_ROW) {
-        int column_count = sqlite3_column_count(stmt); // Get number of columns
-
+        int column_count = sqlite3_column_count(res); // Get number of columns
+        
         for (int i = 0; i < column_count; ++i) {
-            const char* column_name = sqlite3_column_name(stmt, i);
-            const char* column_value = reinterpret_cast<const char*>(sqlite3_column_text(stmt, i));
-
+            const char* column_name = sqlite3_column_name(res, i);
+            const char* column_value = reinterpret_cast<const char*>(sqlite3_column_text(res, i));
+            
             oss << column_name << ": " << (column_value ? column_value : "NULL") << " | ";
         }
         oss << std::endl; // New row
     }
-
-    sqlite3_finalize(stmt);
+    
+    sqlite3_finalize(res);
     return oss.str();
-
+    
 }
 
 string DataAccess::GetLowestIncomeDriver()
 {
     std::string result;
     sqlite3_stmt* stmt;
-
+    
     // Query to find the driver with the fewest trips and their total earnings
     const char* query = R"(
         SELECT d.*, COUNT(co.id) as trip_count, SUM(co.cost) as total_earnings
@@ -152,12 +183,12 @@ string DataAccess::GetLowestIncomeDriver()
         ORDER BY trip_count ASC
         LIMIT 1
     )";
-
+    
     if (sqlite3_prepare_v2(db, query, -1, &stmt, nullptr) != SQLITE_OK) {
         result = "Error preparing query: " + std::string(sqlite3_errmsg(db));
         return result;
     }
-
+    
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         // Get all driver information
         int number = sqlite3_column_int(stmt, 0);
@@ -168,7 +199,7 @@ string DataAccess::GetLowestIncomeDriver()
         int yearOfBirth = sqlite3_column_int(stmt, 5);
         int trip_count = sqlite3_column_int(stmt, 6);
         double total_earnings = sqlite3_column_double(stmt, 7);
-
+        
         // Format the result string
         result += "Driver with fewest trips (" + std::to_string(trip_count) + "):\n";
         result += "Number: " + std::to_string(number) + "\n";
@@ -181,7 +212,7 @@ string DataAccess::GetLowestIncomeDriver()
     } else {
         result = "No drivers found in the database.";
     }
-
+    
     sqlite3_finalize(stmt);
     return result;
 }
@@ -190,39 +221,74 @@ string DataAccess::GetLongestRunCar(string surname)
 {
     std::string result;
     sqlite3_stmt* stmt;
-
+    
     // Query to find the car with the highest total usage
     const char* query = R"(
         SELECT c.*
         FROM Car c
         ORDER BY c.usage DESC
-        LIMIT 1
     )";
-
+    
     if (sqlite3_prepare_v2(db, query, -1, &stmt, nullptr) != SQLITE_OK) {
         result = "Error preparing query: " + std::string(sqlite3_errmsg(db));
         return result;
     }
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        // Get all car information
-        const unsigned char* number = sqlite3_column_text(stmt, 0);
-        const unsigned char* brand = sqlite3_column_text(stmt, 1);
-        int usageOnBuyMoment = sqlite3_column_int(stmt, 2);
-        int usage = sqlite3_column_int(stmt, 3);
-        int capableWeight = sqlite3_column_int(stmt, 4);
-
-        // Format the result string
-        result += "Car with highest mileage (" + std::to_string(usage) + "):\n";
-        result += "Number: " + std::string(reinterpret_cast<const char*>(number)) + "\n";
-        result += "Brand: " + std::string(reinterpret_cast<const char*>(brand)) + "\n";
-        result += "Usage at purchase: " + std::to_string(usageOnBuyMoment) + "\n";
-        result += "Current usage: " + std::to_string(usage) + "\n";
-        result += "Capable weight: " + std::to_string(capableWeight) + "\n";
-    } else {
-        result = "No cars found in the database.";
-    }
-
+    
+    auto cars = Car::GetCarFromDB(res);
+    
     sqlite3_finalize(stmt);
-    return result;
+    
+    Role role = getRoleFor(surname);
+    
+    if (role == driver) {
+        const char* sql = "SELECT avaliableCars FROM User WHERE surname=?;";
+        
+        if (sqlite3_prepare_v2(db, sql, -1, &res, nullptr) != SQLITE_OK) {
+            std::cerr << "Failed to prepare statement." << sqlite3_errmsg(db) << std::endl;
+            sqlite3_close(db);
+        }
+        
+        sqlite3_bind_text(res, 1, surname.c_str(), -1, SQLITE_STATIC);
+        
+        int rc = sqlite3_step(res);
+        
+        if (rc != SQLITE_ROW) {
+            std::cerr << "Error happend while reading from db (step): " << sqlite3_errmsg(db) << '\n';
+        }
+        const void* value = sqlite3_column_text(res, 0); 
+        int blobSize = sqlite3_column_bytes(res, 0);
+        
+        sqlite3_finalize(res);
+        
+        auto carsForUser = User::decodeAvaliableCars(value, blobSize);
+        
+        for (auto i : cars) {
+            
+            if (std::find(carsForUser.begin(), carsForUser.end(), i.number) != carsForUser.end()) {
+                std::ostringstream oss;
+                
+                oss << "Car with highest mileage (" << i.usage << "):\n"
+                << "Number: " << i.number << "\n"
+                << "Brand: " << i.brand << "\n"
+                << "Usage at purchase: " << i.usageOnBuyMoment << "\n"
+                << "Current usage: " << i.usage << "\n"
+                << "Capable weight: " << i.capableWeight << "\n";
+                
+                return oss.str();
+            }
+        }
+    } else {
+        auto i = cars[0];
+        
+        std::ostringstream oss;
+        
+        oss << "Car with highest mileage (" << i.usage << "):\n"
+        << "Number: " << i.number << "\n"
+        << "Brand: " << i.brand << "\n"
+        << "Usage at purchase: " << i.usageOnBuyMoment << "\n"
+        << "Current usage: " << i.usage << "\n"
+        << "Capable weight: " << i.capableWeight << "\n";
+        
+        return oss.str();
+    }
 }

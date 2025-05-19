@@ -1,3 +1,6 @@
+#ifndef DA_P
+#define DA_P
+
 #include "Role.h"
 #include <string>
 #include <chrono>
@@ -13,7 +16,6 @@ private:
     sqlite3* db;
     sqlite3_stmt* res;
 
-
 public:
     DataAccess(string dbName = "database.db");
     Role getRoleFor(std::string surname);
@@ -22,3 +24,5 @@ public:
     string GetLowestIncomeDriver();
     string GetLongestRunCar(string surname);
 };
+
+#endif
