@@ -15,9 +15,9 @@ int main() {
     DataAccess db;
     
     if (role == Role::driver) {
-        showDriverMenu(db, surname);
+        loginManager.showDriverMenu(db, surname);
     } else if (role == Role::worker) {
-        showManagerMenu(db);
+        loginManager.showManagerMenu(db);
     } else {
         std::cout << "Неизвестная роль пользователя. Доступ запрещен.\n";
         return 1;

@@ -25,7 +25,7 @@ public:
     string GetLongestRunCar(string surname);
     bool CheckCargoWeight(const std::string &carNumber, double weight);
     void CalculateDriverEarnings(const std::string& startDate, const std::string& endDate);
-    void GetDriverEarnings(const std::string& surname, const std::string& startDate, const std::string& endDate);
+    double GetDriverEarnings(const std::string& surname, const std::string& startDate, const std::string& endDate);
 };
 
 #endif

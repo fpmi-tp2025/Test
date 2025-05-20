@@ -1,4 +1,4 @@
-#include "../include/DataAccess.h"
+#include "DataAccess.h"
 #include <sstream>
 #include "User.h"
 #include <iostream>
@@ -55,39 +55,20 @@ Role DataAccess::getRoleFor(std::string surname) {
     }
 }
 
-std::string DataAccess::GetCompletedOrders(std::string for_who, ymd from, ymd to) {
-    // 1. Validate date range
-    if (from > to) {
-        throw std::invalid_argument("Invalid date range: 'from' date must be earlier than 'to' date.");
-    }
-    
-    // 2. Check if driver exists
-    const char* check_driver_sql = "SELECT 1 FROM Driver WHERE surname = ?;";
-    sqlite3_stmt* check_stmt;
-    if (sqlite3_prepare_v2(db, check_driver_sql, -1, &check_stmt, nullptr) != SQLITE_OK) {
-        std::cerr << "Failed to prepare driver check statement." << sqlite3_errmsg(db);
-    }
-    
-    sqlite3_bind_text(check_stmt, 1, for_who.c_str(), -1, SQLITE_STATIC);
-    if (sqlite3_step(check_stmt) != SQLITE_ROW) {
-        sqlite3_finalize(check_stmt);
-        throw std::invalid_argument("Driver '" + for_who + "' does not exist.");
-    }
-    sqlite3_finalize(check_stmt);
-    
-    // 3. Proceed with original query
+string DataAccess::GetCompletedOrders(string for_who, ymd from, ymd to) {
     std::string start_str = std::format("{:04}-{:02}-{:02}", int(from.year()), unsigned(from.month()), unsigned(from.day()));
     std::string end_str = std::format("{:04}-{:02}-{:02}", int(to.year()), unsigned(to.month()), unsigned(to.day()));
     
-    const char* sql = "SELECT date, surnameOfDriver, numberOfCar, distance, massOfBaggage, cost FROM CompletedOrders WHERE date BETWEEN ? AND ? AND surnameOfDriver=?;";
-    sqlite3_stmt* res;
+    const char* sql = "SELECT date, surnameOfDriver, numberOfCar, distance, massOfBaggage, cost FROM CompletedOrders WHERE surnameOfDriver = ? AND date BETWEEN ? AND ?;";
+    
     if (sqlite3_prepare_v2(db, sql, -1, &res, nullptr) != SQLITE_OK) {
-        throw std::runtime_error("Failed to prepare query statement.");
+        std::cerr << "Failed to prepare statement." << std::endl;
+        return "Error preparing statement";
     }
     
-    sqlite3_bind_text(res, 1, start_str.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(res, 2, end_str.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(res, 3, for_who.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(res, 1, for_who.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(res, 2, start_str.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(res, 3, end_str.c_str(), -1, SQLITE_STATIC);
     
     std::ostringstream oss;
     bool has_results = false;
@@ -294,4 +275,81 @@ string DataAccess::GetLongestRunCar(string surname)
         
         return oss.str();
     }
+}
+
+bool DataAccess::CheckCargoWeight(const std::string& carNumber, double weight) {
+    const char* sql = "SELECT capableWeight FROM Car WHERE number = ?";
+    sqlite3_stmt* stmt;
+    
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement." << std::endl;
+        return false;
+    }
+    
+    sqlite3_bind_text(stmt, 1, carNumber.c_str(), -1, SQLITE_STATIC);
+    
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return false;
+    }
+    
+    double capableWeight = sqlite3_column_double(stmt, 0);
+    sqlite3_finalize(stmt);
+    
+    return weight <= capableWeight;
+}
+
+void DataAccess::CalculateDriverEarnings(const std::string& startDate, const std::string& endDate) {
+    const char* sql = R"(
+        INSERT INTO DriverEarnings (surname, earnings, period_start, period_end)
+        SELECT surnameOfDriver, SUM(cost * 0.2), ?, ?
+        FROM CompletedOrders
+        WHERE date BETWEEN ? AND ?
+        GROUP BY surnameOfDriver
+    )";
+    
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement." << std::endl;
+        return;
+    }
+    
+    sqlite3_bind_text(stmt, 1, startDate.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, endDate.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, startDate.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, endDate.c_str(), -1, SQLITE_STATIC);
+    
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        std::cerr << "Error executing statement: " << sqlite3_errmsg(db) << std::endl;
+    }
+    
+    sqlite3_finalize(stmt);
+}
+
+double DataAccess::GetDriverEarnings(const std::string& surname, const std::string& startDate, const std::string& endDate) {
+    const char* sql = R"(
+        SELECT SUM(cost * 0.2)
+        FROM CompletedOrders
+        WHERE surnameOfDriver = ? AND date BETWEEN ? AND ?
+    )";
+    
+    sqlite3_stmt* stmt;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        std::cerr << "Failed to prepare statement." << std::endl;
+        return 0.0;
+    }
+    
+    sqlite3_bind_text(stmt, 1, surname.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, startDate.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, endDate.c_str(), -1, SQLITE_STATIC);
+    
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return 0.0;
+    }
+    
+    double earnings = sqlite3_column_double(stmt, 0);
+    sqlite3_finalize(stmt);
+    
+    return earnings;
 }
