@@ -2,6 +2,7 @@
 #define LM_P
 
 #include "Role.h"
+#include "DataAccess.h"
 #include <string>
 
 class LoginManager

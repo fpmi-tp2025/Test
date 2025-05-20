@@ -1,8 +1,8 @@
 #include <iostream>
 #include <string>
-#include "../include/LoginManager.h"
-#include "../include/DataAccess.h"
-#include "../include/User.h"
+#include "LoginManager.h"
+#include "DataAccess.h"
+#include "User.h"
 
 int main() {
     std::string surname;
