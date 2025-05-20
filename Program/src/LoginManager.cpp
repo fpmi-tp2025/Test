@@ -1,5 +1,8 @@
-#include "../include/LoginManager.h"
-#include "../include/DataAccess.h"
+#include "LoginManager.h"
+#include "DataAccess.h"
+#include <iostream>
+#include <sstream>
+#include <chrono>
 
 Role LoginManager::authenticate(std::string surname) {
     DataAccess db;
@@ -24,87 +27,23 @@ void LoginManager::showDriverMenu(DataAccess& db, const std::string& surname) {
         
         if (choice == 0) break;
         
-        try {
-            switch (choice) {
-                case 1: {
-                    std::cout << "Введите номер машины: ";
-                    std::cin >> carNumber;
-                    std::cout << db.GetCarRunWeightAndData(carNumber, surname) << std::endl;
-                    break;
-                }
-                case 2: {
-                    // Реализация показа персональных данных
-                    break;
-                }
-                case 3: {
-                    std::cout << "Введите начальную дату (ГГГГ-ММ-ДД): ";
-                    std::cin >> startDate;
-                    std::cout << "Введите конечную дату (ГГГГ-ММ-ДД): ";
-                    std::cin >> endDate;
-                    std::cout << db.GetCompletedOrders(surname, startDate, endDate) << std::endl;
-                    break;
-                }
-                case 4: {
-                    std::cout << "Введите номер машины: ";
-                    std::cin >> carNumber;
-                    std::cout << db.GetCarRunWeightAndData(carNumber, surname) << std::endl;
-                    break;
-                }
-                case 5: {
-                    // Реализация показа статистики
-                    break;
-                }
-                case 6: {
-                    std::cout << "Введите начальную дату (ГГГГ-ММ-ДД): ";
-                    std::cin >> startDate;
-                    std::cout << "Введите конечную дату (ГГГГ-ММ-ДД): ";
-                    std::cin >> endDate;
-                    // Реализация показа начислений
-                    break;
-                }
-                default:
-                    std::cout << "Неверный выбор. Попробуйте снова.\n";
+        
+        switch (choice) {
+            case 1: {
+                std::cout << "Введите номер машины: ";
+                std::cin >> carNumber;
+                std::cout << db.GetCarRunWeightAndData(carNumber, surname) << std::endl;
+                break;
             }
-        } catch (const std::exception& e) {
-            std::cerr << "Ошибка: " << e.what() << std::endl;
+            case 2: {
+                // Реализация показа персональных данных
+                break;
+            }
+            
         }
     }
 }
 
-void LoginManager::showManagerMenu(DataAccess& db) {
-    int choice;
-    
-    while (true) {
-        std::cout << "\nМеню менеджера:\n";
-        std::cout << "1. Показать водителя с наименьшим количеством поездок\n";
-        std::cout << "2. Показать машину с наибольшим пробегом\n";
-        std::cout << "3. Добавить запись\n";
-        std::cout << "4. Обновить запись\n";
-        std::cout << "5. Удалить запись\n";
-        std::cout << "0. Выход\n";
-        std::cout << "Выберите действие: ";
-        std::cin >> choice;
-        
-        if (choice == 0) break;
-        
-        switch (choice) {
-            case 1:
-                std::cout << db.GetLowestIncomeDriver() << std::endl;
-                break;
-            case 2:
-                std::cout << db.GetLongestRunCar("") << std::endl;
-                break;
-            case 3:
-                // Реализация добавления записи
-                break;
-            case 4:
-                // Реализация обновления записи
-                break;
-            case 5:
-                // Реализация удаления записи
-                break;
-            default:
-                std::cout << "Неверный выбор. Попробуйте снова.\n";
-        }
-    }
+void LoginManager::showManagerMenu(DataAccess &db)
+{
 }

@@ -45,9 +45,9 @@ Role DataAccess::getRoleFor(std::string surname) {
     
     sqlite3_finalize(res);
     
-    if (std::string(reinterpret_cast<const char*>(value)) == "worker") {
+    if (std::string(reinterpret_cast<const char*>(value)) == "admin") {
         return Role::worker;
-    } else if (std::string(reinterpret_cast<const char*>(value)) == "driver") {
+    } else if (std::string(reinterpret_cast<const char*>(value)) == "user") {
         return Role::driver;
     } else {
         std::cerr << "Wrong role returned: " << roleStr << '\n';
