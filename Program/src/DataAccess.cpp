@@ -1,6 +1,6 @@
-#include "DataAccess.h"
+#include "../include/DataAccess.h"
 #include <sstream>
-#include "User.h"
+#include "../include/User.h"
 
 void check_rc(int rc, sqlite3* db) {
     if (rc != SQLITE_OK) {
@@ -10,41 +10,43 @@ void check_rc(int rc, sqlite3* db) {
     }
 }
 
-DataAccess::DataAccess(string dbName)
-{
-    int rc = sqlite3_open(dbName, &db);
+DataAccess::DataAccess(string dbName) {
+    int rc = sqlite3_open(dbName.c_str(), &db);
     
     if (rc != SQLITE_OK) {
         std::cerr << "Cannot open database: " << sqlite3_errmsg(db) << std::endl;
         sqlite3_close(db);
-        return nullptr;
     }
 }
 
-Role DataAccess::getRoleFor(std::string surname)
-{
+Role DataAccess::getRoleFor(std::string surname) {
     const char* sql = "SELECT role FROM User WHERE surname=?";
-    rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
+    int rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
     check_rc(rc, db);
-    rc = sqlite3_bind_text(res, 1, surname, -1, SQLITE_STATIC);
+    
+    rc = sqlite3_bind_text(res, 1, surname.c_str(), -1, SQLITE_STATIC);
     check_rc(rc, db);
+    
     rc = sqlite3_step(res);
     if (rc != SQLITE_ROW) {
-        std::cerr << "Error happend while reading from db (step): " << sqlite3_errmsg(db) << '\n';
+        std::cerr << "Error happened while reading from db (step): " << sqlite3_errmsg(db) << '\n';
+        sqlite3_finalize(res);
+        return Role::worker; // или другое значение по умолчанию
     }
+    
     const unsigned char* value = sqlite3_column_text(res, 0);
+    std::string roleStr(reinterpret_cast<const char*>(value));
     
-    sqlite3_finalize(stmt);
+    sqlite3_finalize(res);
     
-    if (value == "worker") {
+    if (roleStr == "worker") {
         return Role::worker;
-    } else if (value == "driver") {
+    } else if (roleStr == "driver") {
         return Role::driver;
     } else {
-        std::cerr << "Wrong role returned: " << value << '\n';
+        std::cerr << "Wrong role returned: " << roleStr << '\n';
+        return Role::worker; // или другое значение по умолчанию
     }
-    
-    
 }
 
 string DataAccess::GetCompletedOrders(string for_who, ymd from, ymd to)

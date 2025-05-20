@@ -8,6 +8,6 @@ struct User
     Role role;
     char** avaliableCars;
 
-    static std::vector<std::string> decodeAvaliableCars(const void* blobPtr, int blobSize);
-    std::unique_ptr<const void> encodeAvaliableCars(const std::vector<std::string>& avaliableCars);
+    static std::vector<std::string> decodeAvailableCars(const void* blobPtr, int blobSize);
+    std::unique_ptr<const void> encodeAvailableCars(const std::vector<std::string>& avaliableCars);
 };

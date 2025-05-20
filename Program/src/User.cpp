@@ -2,7 +2,7 @@
 #include <memory>
 #include <iostream>
 
-std::vector<std::string> User::decodeAvaliableCars(const void* blobPtr, int blobSize)
+std::vector<std::string> User::decodeAvailableCars(const void* blobPtr, int blobSize)
 {
     std::vector<std::string> cars;
     
@@ -47,7 +47,7 @@ std::vector<std::string> User::decodeAvaliableCars(const void* blobPtr, int blob
     return cars;
 }
 
-std::unique_ptr<const void> User::encodeAvaliableCars(const std::vector<std::string> &avaliableCars)
+std::unique_ptr<const void> User::encodeAvailableCars(const std::vector<std::string> &avaliableCars)
 {
     // Data to store: an array of texts representing available cars.
     const int numCars = avaliableCars.size();
