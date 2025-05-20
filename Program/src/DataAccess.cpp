@@ -1,4 +1,4 @@
-#include "DataAccess.h"
+#include "../include/DataAccess.h"
 #include <sstream>
 #include "User.h"
 #include <iostream>
@@ -23,21 +23,25 @@ DataAccess::DataAccess(string dbName)
     }
 }
 
-Role DataAccess::getRoleFor(std::string surname)
-{
+Role DataAccess::getRoleFor(std::string surname) {
     const char* sql = "SELECT role FROM User WHERE surname=?";
     int rc = sqlite3_prepare_v2(db, sql, -1, &res, 0);
     check_rc(rc, db);
     rc = sqlite3_bind_text(res, 1, surname.c_str(), -1, SQLITE_STATIC);
     check_rc(rc, db);
+    
     rc = sqlite3_step(res);
     if (rc == SQLITE_DONE) {
         throw std::invalid_argument("No user with this surname!");
     }
     if (rc != SQLITE_ROW) {
-        std::cerr << "Error happend while reading from db (step): " << sqlite3_errmsg(db) << '\n';
+        std::cerr << "Error happened while reading from db (step): " << sqlite3_errmsg(db) << '\n';
+        sqlite3_finalize(res);
+        return Role::worker; // или другое значение по умолчанию
     }
+    
     const unsigned char* value = sqlite3_column_text(res, 0);
+    std::string roleStr(reinterpret_cast<const char*>(value));
     
     sqlite3_finalize(res);
     
@@ -46,10 +50,9 @@ Role DataAccess::getRoleFor(std::string surname)
     } else if (std::string(reinterpret_cast<const char*>(value)) == "driver") {
         return Role::driver;
     } else {
-        std::cerr << "Wrong role returned: " << value << '\n';
+        std::cerr << "Wrong role returned: " << roleStr << '\n';
+        return Role::worker; // или другое значение по умолчанию
     }
-    
-    
 }
 
 std::string DataAccess::GetCompletedOrders(std::string for_who, ymd from, ymd to) {

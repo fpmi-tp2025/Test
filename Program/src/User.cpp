@@ -2,7 +2,7 @@
 #include <memory>
 #include <iostream>
 
-std::vector<std::string> User::decodeAvaliableCars(const void* blobPtr, int blobSize)
+std::vector<std::string> User::decodeAvailableCars(const void* blobPtr, int blobSize)
 {
     std::vector<std::string> cars;
     
