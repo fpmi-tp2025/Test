@@ -1,0 +1,3 @@
+enum Role {
+    worker, driver
+};
